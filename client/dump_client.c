@@ -66,7 +66,9 @@ int main(int argc, char *argv[]){
 		return 0;
 	}
     FILE *fp;
-    fp = fopen("logUser.log", "rb");
+    char lokasi[10000];
+	snprintf(lokasi, sizeof lokasi, "../database/log/log%s.log", argv[2]);
+    fp = fopen(lokasi, "rb");
     char buffer[20000];
     char perintah[100][10000];
     int found=0;
