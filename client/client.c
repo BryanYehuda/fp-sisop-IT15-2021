@@ -58,7 +58,9 @@ void writelog(char *perintah, char *nama){
 	char infoWriteLog[1000];
 
 	FILE *file;
-	file = fopen("logUser.log", "ab");
+	char lokasi[10000];
+	snprintf(lokasi, sizeof lokasi, "../database/log/log%s.log", nama);
+	file = fopen(lokasi, "ab");
 
 	sprintf(infoWriteLog, "%d-%.2d-%.2d %.2d:%.2d:%.2d:%s:%s;\n",timeinfo->tm_year + 1900, timeinfo->tm_mon + 1, timeinfo->tm_mday, timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec, nama, perintah);
 	// sprintf(infoWriteLog, "%.2d%.2d%d-%.2d:%.2d:%.2d::%s::%s\n", timeinfo->tm_mday, timeinfo->tm_mon + 1, timeinfo->tm_year + 1900, timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec, nama, filepath);
@@ -112,7 +114,7 @@ int main(int argc, char *argv[]){
 		char copyinput[10000];
 		char perintah[100][10000];
 		char *token;
-		int i=0;
+		int i=0;  
 		scanf(" %[^\n]s", input);
 		strcpy(copyinput, input);
 		// printf("ini input %s\n", input);
