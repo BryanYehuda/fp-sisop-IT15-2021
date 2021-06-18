@@ -96,6 +96,6 @@ int main() {
             // execv("/bin/rm", hapus); 
             // exit(1);
         }
-        sleep(30);
+        sleep(3600);
     }
 }
