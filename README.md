@@ -459,9 +459,443 @@ nah karena membuat database, bearti membuat sebuah folder, maka kami menggunakan
 ## 9. Drop Table oleh user
 ## 10. Drop column oleh user
 ## 11. Insert oleh user
+Apabila user memasukkan perintah "INSERT" dan juga "INTO" [nama_tabel] ([value], ...);
+maka akan dilakukan pemanggilan perintah snprintf dengan parameter buffer, sizeof buffer, "insert:%s", dan copyinput dimana hasil inputan dari User ini berupa nama_tabel dan value akan dilakukan penyimpanan kedalam buffer dengan size sebesar ukuran inputan. Kemudian Inputan ini akan dilakukan pengiriman ke Database dengan melakukan pemanggilan fungsi send dengan parameter clientSocket, buffer, strlen(buffer), 0 yang nantinya fungsi ini akan melakukan pengiriman hasil inputan dari user yang tersimpan di dalam buffer ke server untuk dimasukkan kedalam Database.
+```c
+else if(strcmp(perintah[0], "INSERT")==0 && strcmp(perintah[1], "INTO")==0){
+            snprintf(buffer, sizeof buffer, "insert:%s", copyinput);
+			send(clientSocket, buffer, strlen(buffer), 0);
+```
+Kemudian di bagian server, pertama-tama akan dilakukan pencarian database, jika database belum dilakukan pemilihan, maka kembalikan kalimat "You're not selecting database yet" ke dalam buffer untuk dilakukan pengiriman kembali kepada client.
+```c
+else if(strcmp(perintah[0], "insert")==0){
+                    if(database_used[0] == '\0'){
+						strcpy(database_used, "You're not selecting database yet");
+						send(newSocket, database_used, strlen(database_used), 0);
+						bzero(buffer, sizeof(buffer));
+						continue;
+					}
+```
+Kemudian, jika database sudah dilakukan pemilihan, maka ambil perintah yang tadi dikirimkan dan lakukan penyimpanan kedalam buffer. Lalu lakukan pencarian table didalam file yang ditunjuk sesuai dengan yang diminta oleh user pada perintah [nama_tabel]. Jika table tidak dapat ditemukan maka kembalikan kalimat "TABLE NOT FOUND" ke dalam buffer untuk dilakukan pengiriman kembali kepada client.
+```c
+                    char daftarQuery[100][10000];
+					char copyPerintah[20000];
+					snprintf(copyPerintah, sizeof copyPerintah, "%s", perintah[1]);
+                    // printf("%s\n", copyPerintah);
+                    char *tokens;
+                    tokens = strtok(copyPerintah, "\'(), ");
+					int jumlah=0;
+					while( tokens != NULL ) {
+						strcpy(daftarQuery[jumlah], tokens);
+						// printf("%s\n", daftarQuery[jumlah]);
+						jumlah++;
+						tokens = strtok(NULL, "\'(), ");
+					}
+                    char buatTable[20000];
+					snprintf(buatTable, sizeof buatTable, "databases/%s/%s", database_used, daftarQuery[2]);
+                    // printf("buat table = %s\n", buatTable);
+                    FILE *fp;
+					// printf("%s\n", buatTable);
+                    int banyakKolom;
+					fp=fopen(buatTable,"r");
+                    if (fp == NULL){
+                        char peringatan[] = "TABLE NOT FOUND";
+                        send(newSocket, peringatan, strlen(peringatan), 0);
+                        bzero(buffer, sizeof(buffer));
+                        continue;
+```
+Jika table berhasil ditemukan, maka lakukan pembuatan kolom sesuai dengan banyak iterasi data yang dikirimkan oleh input user dimulai dari kolom yang paling akhir. Jika kolom tidak sesuai maka kembalikan kalimat "YOUR INPUT NOT MATCH THE COLUMN" ke dalam buffer untuk dilakukan pengiriman kembali kepada client.
+```c
+                    }else{
+                        struct table user;
+                        fread(&user,sizeof(user),1,fp);
+                        banyakKolom=user.jumlahkolom;
+                        fclose(fp);
+                    }
+					int iterasi = 0;
+					int iterasiData = 3;
+					struct table kolom;
+					while(jumlah > 3){
+						strcpy(kolom.data[iterasi], daftarQuery[iterasiData]);
+                        printf("%s\n", kolom.data[iterasi]);
+						strcpy(kolom.type[iterasi], "string");
+						iterasiData++;
+						jumlah=jumlah-1;
+						iterasi++;
+					}
+					kolom.jumlahkolom = iterasi;
+                    // printf("iterasi = %d\n", iterasi);
+                    // printf("%d\n", user.jumlahkolom);
+                    if(banyakKolom != kolom.jumlahkolom){
+                        char peringatan[] = "YOUR INPUT NOT MATCH THE COLUMN";
+                        send(newSocket, peringatan, strlen(peringatan), 0);
+                        bzero(buffer, sizeof(buffer));
+                        continue;
+                    }   
+```
+Jika semua pencarian table dan pembuatan kolom sudah selesai, maka lakukan write ke dalam database sesuai dengan format yang sudah dibuat dan kembalikan kalimat "Data Has Been Inserted" ke dalam buffer untuk dilakukan pengiriman kembali kepada client. Dan dengan demikian fungsi insert oleh user sudah berhasil dilakukan.
+```c
+					// fwrite(&kolom,sizeof(kolom),1,fp);
+					printf("iterasi = %d\n", iterasi);
+                    FILE *fp1;
+                    printf("%s\n", buatTable);
+                    fp1=fopen(buatTable,"ab");
+                    fwrite(&kolom,sizeof(kolom),1,fp1);
+                    fclose(fp1);
+                    char peringatan[] = "Data Has Been Inserted";
+					send(newSocket, peringatan, strlen(peringatan), 0);
+					bzero(buffer, sizeof(buffer));
+```
 ## 12. Update dan Update Where oleh user
+Apabila user memasukkan perintah "UPDATE" [nama_tabel] SET [nama_kolom]=[value]; maka akan dilakukan pemanggilan perintah snprintf dengan parameter buffer, sizeof buffer, "update:%s", dan copyinput dimana hasil inputan dari User berupa [nama_tabel] dan [nama_kolom]=[value] akan dilakukan penyimpanan kedalam buffer dengan size sebesar ukuran inputan. Kemudian Inputan ini akan dilakukan pengiriman ke Database dengan melakukan pemanggilan fungsi send dengan parameter clientSocket, buffer, strlen(buffer), 0 yang nantinya fungsi ini akan melakukan pengiriman hasil inputan dari user yang tersimpan di dalam buffer ke server untuk melakukan update data didalam Database.
+```c
+else if(strcmp(perintah[0], "UPDATE")==0){
+            snprintf(buffer, sizeof buffer, "update:%s", copyinput);
+			send(clientSocket, buffer, strlen(buffer), 0);
+```
+Kemudian di bagian server, pertama-tama akan dilakukan pencarian database, jika database belum dilakukan pemilihan, maka kembalikan kalimat "You're not selecting database yet" ke dalam buffer untuk dilakukan pengiriman kembali kepada client menggunakan fungsi snprint. Dan dengan demikian fungsi select oleh user sudah berhasil dilakukan.
+```c
+else if(strcmp(perintah[0], "update")==0){
+                    if(database_used[0] == '\0'){
+						strcpy(database_used, "You're not selecting database yet");
+						send(newSocket, database_used, strlen(database_used), 0);
+						bzero(buffer, sizeof(buffer));
+						continue;
+					}
+```
+Kemudian, jika database sudah dilakukan pemilihan, maka ambil perintah yang tadi dikirimkan dan lakukan penyimpanan kedalam buffer. Lalu lakukan pencarian table didalam file yang ditunjuk sesuai dengan yang diminta oleh user pada perintah [nama_tabel]. Kemudian lakukan pencarian kolom sesuai dengan data yang dikirimkan oleh input user. Jika kolom tidak ditemukan maka kembalikan kalimat "Column Not Found" ke dalam buffer untuk dilakukan pengiriman kembali kepada client. Lalu jika kolom berhasil ditemukan maka, lakukan update inputan data yang dikirimkan oleh user ke dalam kolom yang diminta.
+```c
+                    char daftarQuery[100][10000];
+					char copyPerintah[20000];
+					snprintf(copyPerintah, sizeof copyPerintah, "%s", perintah[1]);
+                    // printf("%s\n", copyPerintah);
+                    char *tokens;
+                    tokens = strtok(copyPerintah, "\'(),= ");
+					int jumlah=0;
+					while( tokens != NULL ) {
+						strcpy(daftarQuery[jumlah], tokens);
+						printf("%s\n", daftarQuery[jumlah]);
+						jumlah++;
+						tokens = strtok(NULL, "\'(),= ");
+					}
+                    printf("jumlah = %d\n", jumlah);
+                    char buatTable[20000];
+					snprintf(buatTable, sizeof buatTable, "databases/%s/%s", database_used, daftarQuery[1]);
+                    if(jumlah==5){
+                        printf("buat table = %s, kolumn = %s", buatTable, daftarQuery[3]);
+                        int index = findColumn(buatTable, daftarQuery[3]);
+                        if(index == -1){
+                            char peringatan[] = "Column Not Found";
+                            send(newSocket, peringatan, strlen(peringatan), 0);
+                            bzero(buffer, sizeof(buffer));
+                            continue;
+                        }
+                        printf("index = %d\n", index);
+                        updateColumn(buatTable, index, daftarQuery[4]);
+                    }else if(jumlah==8){
+                        printf("buat table = %s, kolumn = %s", buatTable, daftarQuery[3]);
+                        int index = findColumn(buatTable, daftarQuery[3]);
+                        if(index == -1){
+                            char peringatan[] = "Column Not Found";
+                            send(newSocket, peringatan, strlen(peringatan), 0);
+                            bzero(buffer, sizeof(buffer));
+                            continue;
+                        }
+                        printf("%s\n", daftarQuery[7]);
+                        int indexGanti = findColumn(buatTable, daftarQuery[6]);
+                        updateColumnWhere(buatTable, index, daftarQuery[4], indexGanti ,daftarQuery[7]);
+```
+Kemudian jika data perintah yang dikirimkan ternyata tidak membawa inputan data apapun, maka kembalikan kalimat "Data Has Been Deleted" ke dalam buffer untuk dilakukan pengiriman kembali kepada client. Tetapi jika data perintah yang dikirimkan membawa inputan data maka kembalikan kalimat "Data Has Been Updated" ke dalam buffer untuk dilakukan pengiriman kembali kepada client. Dan dengan demikian fungsi update oleh user sudah berhasil dilakukan.
+```c
+                    }else{
+                        char peringatan[] = "Data Has Been Deleted";
+                        send(newSocket, peringatan, strlen(peringatan), 0);
+                        bzero(buffer, sizeof(buffer));
+                        continue;
+                    }
+                    char peringatan[] = "Data Has Been Updated";
+					send(newSocket, peringatan, strlen(peringatan), 0);
+					bzero(buffer, sizeof(buffer));
+
+                }
+```
 ## 13. Delete dan Delete where oleh user
+Apabila user memasukkan perintah "DELETE" [nama_tabel] maka akan dilakukan pemanggilan perintah snprintf dengan parameter buffer, sizeof buffer, "update:%s", dan copyinput dimana hasil inputan dari User berupa [nama_tabel] akan dilakukan penyimpanan kedalam buffer dengan size sebesar ukuran inputan. Kemudian Inputan ini akan dilakukan pengiriman ke Database dengan melakukan pemanggilan fungsi send dengan parameter clientSocket, buffer, strlen(buffer), 0 yang nantinya fungsi ini akan melakukan pengiriman hasil inputan dari user yang tersimpan di dalam buffer ke server untuk melakukan delete data didalam Database.
+```c
+else if(strcmp(perintah[0], "DELETE")==0){
+            snprintf(buffer, sizeof buffer, "delete:%s", copyinput);
+            send(clientSocket, buffer, strlen(buffer), 0);
+```
+Kemudian di bagian server, pertama-tama akan dilakukan pencarian database, jika database belum dilakukan pemilihan, maka kembalikan kalimat "You're not selecting database yet" ke dalam buffer untuk dilakukan pengiriman kembali kepada client.
+```c
+else if(strcmp(perintah[0], "delete")==0){
+                    if(database_used[0] == '\0'){
+						strcpy(database_used, "You're not selecting database yet");
+						send(newSocket, database_used, strlen(database_used), 0);
+						bzero(buffer, sizeof(buffer));
+						continue;
+					}
+```
+Kemudian, jika database sudah dilakukan pemilihan, maka ambil perintah yang tadi dikirimkan dan lakukan penyimpanan kedalam buffer. Lalu lakukan pencarian table didalam file yang ditunjuk sesuai dengan yang diminta oleh user pada perintah [nama_tabel]. Kemudian lakukan pencarian semua kolom sesuai dengan table yang dipilih. Jika kolom tidak ditemukan maka kembalikan kalimat "Column Not Found" ke dalam buffer untuk dilakukan pengiriman kembali kepada client.
+```c
+                    char daftarQuery[100][10000];
+					char copyPerintah[20000];
+					snprintf(copyPerintah, sizeof copyPerintah, "%s", perintah[1]);
+                    // printf("%s\n", copyPerintah);
+                    char *tokens;
+                    tokens = strtok(copyPerintah, "\'(),= ");
+					int jumlah=0;
+					while( tokens != NULL ) {
+						strcpy(daftarQuery[jumlah], tokens);
+						printf("%s\n", daftarQuery[jumlah]);
+						jumlah++;
+						tokens = strtok(NULL, "\'(),= ");
+					}
+                    printf("jumlah = %d\n", jumlah);
+                    char buatTable[20000];
+					snprintf(buatTable, sizeof buatTable, "databases/%s/%s", database_used, daftarQuery[2]);
+                    if(jumlah==3){
+                        deleteTable(buatTable, daftarQuery[2]);
+                    }else if(jumlah==6){
+                        int index = findColumn(buatTable, daftarQuery[4]);
+                        if(index == -1){
+                            char peringatan[] = "Column Not Found";
+                            send(newSocket, peringatan, strlen(peringatan), 0);
+                            bzero(buffer, sizeof(buffer));
+                            continue;
+                        }
+```
+Lalu jika kolom berhasil ditemukan maka, lakukan penghapusan semua data yang ada di dalam table yang dilakukan pemilihan oleh user. Kemudian kembalikan kalimat "Data Has Been Deleted" ke dalam buffer untuk dilakukan pengiriman kembali kepada client. Dan dengan demikian fungsi delete oleh user sudah berhasil dilakukan.
+```c
+                        printf("index  = %d\n", index);
+                        deleteTableWhere(buatTable, index, daftarQuery[4], daftarQuery[5]);
+                    }else{
+                        char peringatan[] = "Input Salah";
+                        send(newSocket, peringatan, strlen(peringatan), 0);
+                        bzero(buffer, sizeof(buffer));
+                        continue;
+                    }
+                    char peringatan[] = "Data Has Been Deleted";
+					send(newSocket, peringatan, strlen(peringatan), 0);
+					bzero(buffer, sizeof(buffer));
+                }
+```
 ## 14. Select dan Select where oleh user
+Apabila user memasukkan perintah "SELECT" [nama_kolom, … | *] FROM [nama_tabel]; maka akan dilakukan pemanggilan perintah snprintf dengan parameter buffer, sizeof buffer, "update:%s", dan copyinput dimana hasil inputan dari User berupa [nama_kolom, … | *] dan [nama_tabel] akan dilakukan penyimpanan kedalam buffer dengan size sebesar ukuran inputan. Kemudian Inputan ini akan dilakukan pengiriman ke Database dengan melakukan pemanggilan fungsi send dengan parameter clientSocket, buffer, strlen(buffer), 0 yang nantinya fungsi ini akan melakukan pengiriman hasil inputan dari user yang tersimpan di dalam buffer ke server untuk melakukan select data didalam Database.
+```c
+else if(strcmp(perintah[0], "SELECT")==0){
+            snprintf(buffer, sizeof buffer, "select:%s", copyinput);
+            send(clientSocket, buffer, strlen(buffer), 0);
+```
+Kemudian di bagian server, pertama-tama akan dilakukan pencarian database, jika database belum dilakukan pemilihan, maka kembalikan kalimat "You're not selecting database yet" ke dalam buffer untuk dilakukan pengiriman kembali kepada client.
+```c
+else if(strcmp(perintah[0], "select")==0){
+                    if(database_used[0] == '\0'){
+						strcpy(database_used, "You're not selecting database yet");
+						send(newSocket, database_used, strlen(database_used), 0);
+						bzero(buffer, sizeof(buffer));
+						continue;
+					}
+```
+Lalu kemudian kita lakukan pencarian table dan juga kolom sesuai dengan perintah yang diminta dari inputan user. Setelah kita berhasil menemukan table dan kolom yang sesuai, maka akan kita lakukan pengambilan data tersebut dan kemudian kita lakukan pengembalian data tersebut kepada client
+```c
+                    char daftarQuery[100][10000];
+					char copyPerintah[20000];
+					snprintf(copyPerintah, sizeof copyPerintah, "%s", perintah[1]);
+                    // printf("%s\n", copyPerintah);
+                    char *tokens;
+                    tokens = strtok(copyPerintah, "\'(),= ");
+					int jumlah=0;
+					while( tokens != NULL ) {
+						strcpy(daftarQuery[jumlah], tokens);
+						printf("%s\n", daftarQuery[jumlah]);
+						jumlah++;
+						tokens = strtok(NULL, "\'(),= ");
+					}
+					printf("ABC\n");
+                    if(jumlah == 4){
+						char buatTable[20000];
+						snprintf(buatTable, sizeof buatTable, "databases/%s/%s", database_used, daftarQuery[3]);
+						printf("buat table = %s", buatTable);
+                        char perintahKolom[1000];
+                        printf("masuk 4\n");
+                        if(strcmp(daftarQuery[1], "*")==0){
+                            // showTableAll(buatTable, "ALL");
+                            FILE *fp, *fp1;
+                            struct table user;
+                            int id,found=0;
+                            fp=fopen(buatTable,"rb");
+                            char buffers[40000];
+                            char sendDatabase[40000];
+                            bzero(buffer, sizeof(buffer));
+                            bzero(sendDatabase, sizeof(sendDatabase));
+                            while(1){	
+                                char enter[] = "\n";
+                                // bzero(enter, sizeof(enter));
+                                fread(&user,sizeof(user),1,fp);
+                                snprintf(buffers, sizeof buffers, "\n");
+                                // send(newSocket, enter, strlen(enter), 0);
+                                if(feof(fp)){
+                                    break;
+                                }
+                                for(int i=0; i< user.jumlahkolom; i++){
+                                    char padding[20000];
+                                    snprintf(padding, sizeof padding, "%s\t",user.data[i]);
+                                    strcat(buffers, padding);
+                                    // send(newSocket, buffer, strlen(buffer), 0);
+                                    // bzero(buffer, sizeof(buffer));
+                                }
+                                // printf("%s", buffers);
+                                strcat(sendDatabase, buffers);
+                            }
+                            // printf("ini send fix\n%s\n", sendDatabase);
+                            send(newSocket, sendDatabase, strlen(sendDatabase), 0);
+                            bzero(sendDatabase, sizeof(sendDatabase));
+                            bzero(buffer, sizeof(buffer));
+                            fclose(fp);
+                        }else{
+                            // showTable(buatTable, perintah[1]);
+                            int index = findColumn(buatTable, daftarQuery[1]);
+                            printf("%d\n", index);
+                            FILE *fp, *fp1;
+                            struct table user;
+                            int id,found=0;
+                            fp=fopen(buatTable,"rb");
+                            char buffers[40000];
+                            char sendDatabase[40000];
+                            bzero(buffer, sizeof(buffer));
+                            bzero(sendDatabase, sizeof(sendDatabase));
+                            while(1){	
+                                char enter[] = "\n";
+                                // bzero(enter, sizeof(enter));
+                                fread(&user,sizeof(user),1,fp);
+                                snprintf(buffers, sizeof buffers, "\n");
+                                // send(newSocket, enter, strlen(enter), 0);
+                                if(feof(fp)){
+                                    break;
+                                }
+                                for(int i=0; i< user.jumlahkolom; i++){
+                                    if(i == index){
+                                        char padding[20000];
+                                        snprintf(padding, sizeof padding, "%s\t",user.data[i]);
+                                        strcat(buffers, padding);
+                                    }
+                                    // send(newSocket, buffer, strlen(buffer), 0);
+                                    // bzero(buffer, sizeof(buffer));
+                                }
+                                // printf("%s", buffers);
+                                strcat(sendDatabase, buffers);
+                            }
+                            printf("ini send fix\n%s\n", sendDatabase);
+                            fclose(fp);
+                            send(newSocket, sendDatabase, strlen(sendDatabase), 0);
+                            bzero(sendDatabase, sizeof(sendDatabase));
+                            bzero(buffer, sizeof(buffer));
+                        }
+                    }else if(jumlah == 7 && strcmp(daftarQuery[4], "WHERE")==0){
+						char buatTable[20000];
+						snprintf(buatTable, sizeof buatTable, "databases/%s/%s", database_used, daftarQuery[3]);
+						printf("buat table = %s", buatTable);
+                        char perintahKolom[1000];
+                        printf("masuk 4\n");
+                        if(strcmp(daftarQuery[1], "*")==0){
+                            // showTableAll(buatTable, "ALL");
+                            FILE *fp, *fp1;
+                            struct table user;
+                            int id,found=0;
+                            fp=fopen(buatTable,"rb");
+                            char buffers[40000];
+                            char sendDatabase[40000];
+                            int index = findColumn(buatTable, daftarQuery[5]);
+                            printf("%d\n", index);
+                            bzero(buffer, sizeof(buffer));
+                            bzero(sendDatabase, sizeof(sendDatabase));
+                            while(1){	
+                                char enter[] = "\n";
+                                // bzero(enter, sizeof(enter));
+                                fread(&user,sizeof(user),1,fp);
+                                snprintf(buffers, sizeof buffers, "\n");
+                                // send(newSocket, enter, strlen(enter), 0);
+                                if(feof(fp)){
+                                    break;
+                                }
+                                for(int i=0; i< user.jumlahkolom; i++){
+                                    if(strcmp(user.data[index], daftarQuery[6])==0){
+                                        char padding[20000];
+                                        snprintf(padding, sizeof padding, "%s\t",user.data[i]);
+                                        strcat(buffers, padding);
+                                    }
+                                    // send(newSocket, buffer, strlen(buffer), 0);
+                                    // bzero(buffer, sizeof(buffer));
+                                }
+                                // printf("%s", buffers);
+                                strcat(sendDatabase, buffers);
+                            }
+                            // printf("ini send fix\n%s\n", sendDatabase);
+                            send(newSocket, sendDatabase, strlen(sendDatabase), 0);
+                            bzero(sendDatabase, sizeof(sendDatabase));
+                            bzero(buffer, sizeof(buffer));
+                            fclose(fp);
+                        }else{
+                            // showTable(buatTable, perintah[1]);
+                            int index = findColumn(buatTable, daftarQuery[1]);
+                            printf("%d\n", index);
+                            FILE *fp, *fp1;
+                            struct table user;
+                            int id,found=0;
+                            int indexGanti = findColumn(buatTable, daftarQuery[5]);
+                            fp=fopen(buatTable,"rb");
+                            char buffers[40000];
+                            char sendDatabase[40000];
+                            bzero(buffer, sizeof(buffer));
+                            bzero(sendDatabase, sizeof(sendDatabase));
+                            while(1){	
+                                char enter[] = "\n";
+                                // bzero(enter, sizeof(enter));
+                                fread(&user,sizeof(user),1,fp);
+                                snprintf(buffers, sizeof buffers, "\n");
+                                // send(newSocket, enter, strlen(enter), 0);
+                                if(feof(fp)){
+                                    break;
+                                }
+                                for(int i=0; i< user.jumlahkolom; i++){
+                                    if(i == index && (strcmp(user.data[indexGanti], daftarQuery[6])==0 || strcmp(user.data[i],daftarQuery[5])==0)){
+                                        char padding[20000];
+                                        snprintf(padding, sizeof padding, "%s\t",user.data[i]);
+                                        strcat(buffers, padding);
+                                    }
+                                    // send(newSocket, buffer, strlen(buffer), 0);
+                                    // bzero(buffer, sizeof(buffer));
+                                }
+                                // printf("%s", buffers);
+                                strcat(sendDatabase, buffers);
+                            }
+                            printf("ini send fix\n%s\n", sendDatabase);
+                            fclose(fp);
+                            send(newSocket, sendDatabase, strlen(sendDatabase), 0);
+                            bzero(sendDatabase, sizeof(sendDatabase));
+                            bzero(buffer, sizeof(buffer));
+                        }
+                    }else{
+						printf("ini query 3 %s", daftarQuery[jumlah-3]);
+						if(strcmp(daftarQuery[jumlah-3], "WHERE")!= 0){
+							char buatTable[20000];
+							snprintf(buatTable, sizeof buatTable, "databases/%s/%s", database_used, daftarQuery[jumlah-1]);
+							printf("buat table = %s", buatTable);
+							printf("tanpa where");
+							int index[100];
+							int iterasi=0;
+							for(int i=1; i<jumlah-2; i++){
+								index[iterasi] = findColumn(buatTable, daftarQuery[i]);
+								printf("%d\n", index[iterasi]);
+								iterasi++;
+							}
+						}else if(strcmp(daftarQuery[jumlah-3], "WHERE")== 0){
+							printf("dengan where");
+						}
+					}
+                }
+```
 ## 15. Logging untuk setiap perintah user
 Setiap perintah yang dimasukkan user akan dicek apakah valid atau tidak. Hal tersebut kami lakukan dengan memanggil fungsi dibawah ini
 ```c
