@@ -455,12 +455,189 @@ else if(strcmp(perintah[0], "cDatabase")==0){
 ```
 nah karena membuat database, bearti membuat sebuah folder, maka kami menggunakan mkdir. dan karna yang membuat database, langsung mempunyai akses maka kami memanggil fungsi insertPermission(sudah dijelaskan diatas) untuk memasukkan permission user tersebut.
 ## 7. Create Table oleh user
+Apabila user memasukkan perintah "CREATE" dan juga "TABLE" [nama_tabel] ([nama_kolom] [tipe_data], ...); maka akan dilakukan pemanggilan perintah snprintf dengan parameter buffer, sizeof buffer, "cTable:%s", dan copyinput dimana hasil inputan dari User ini berupa [nama_tabel], [nama_kolom], dan [tipe_data] akan dilakukan penyimpanan kedalam buffer dengan size sebesar ukuran inputan. Kemudian Inputan ini akan dilakukan pengiriman ke Database dengan melakukan pemanggilan fungsi send dengan parameter clientSocket, buffer, strlen(buffer), 0 yang nantinya fungsi ini akan melakukan pengiriman hasil inputan dari user yang tersimpan di dalam buffer ke server untuk melakukan pembuatan table.
+```c
+if(strcmp(perintah[0], "CREATE")==0){
+			if(strcmp(perintah[1], "USER")==0 && strcmp(perintah[3], "IDENTIFIED")==0 && strcmp(perintah[4], "BY")==0){
+				snprintf(buffer, sizeof buffer, "cUser:%s:%s:%d", perintah[2], perintah[5], id_user);
+				// printf("%s\n", buffer);
+				send(clientSocket, buffer, strlen(buffer), 0);
+			}else if(strcmp(perintah[1], "DATABASE")==0){
+				snprintf(buffer, sizeof buffer, "cDatabase:%s:%s:%d", perintah[2], argv[2], id_user);
+				// printf("%s\n", buffer);
+				send(clientSocket, buffer, strlen(buffer), 0);
+			}else if(strcmp(perintah[1], "TABLE")==0){
+				snprintf(buffer, sizeof buffer, "cTable:%s", copyinput);
+				// printf("%s\n", buffer);
+				send(clientSocket, buffer, strlen(buffer), 0);
+			}
+```
+Kemudian di bagian server, pertama-tama akan dilakukan pencarian database, jika database belum dilakukan pemilihan, maka kembalikan kalimat "You're not selecting database yet" ke dalam buffer untuk dilakukan pengiriman kembali kepada client.
+```c
+else if(strcmp(perintah[0], "cTable")==0){
+					printf("%s\n", perintah[1]);
+					char *tokens;
+					if(database_used[0] == '\0'){
+						strcpy(database_used, "You're not selecting database yet");
+						send(newSocket, database_used, strlen(database_used), 0);
+						bzero(buffer, sizeof(buffer));
+```
+Kemudian, jika database sudah dilakukan pemilihan, maka ambil perintah yang tadi dikirimkan dan lakukan penyimpanan kedalam buffer. Lalu lakukan pembuatan table didalam file yang ditunjuk sesuai dengan yang diminta oleh user pada perintah [nama_tabel], pembuatan kolom didalam file yang ditunjuk sesuai dengan yang diminta oleh user pada perintah [nama_kolom], beserta dengan tipe data yang diminta sebanyak iterasi pemanggilan data yang diminta oleh user. Dan dengan demikian fungsi Create Table sudah berhasil dilakukan.
+```c
+					}else{
+                        char daftarQuery[100][10000];
+                        char copyPerintah[20000];
+                        snprintf(copyPerintah, sizeof copyPerintah, "%s", perintah[1]);
+                        tokens = strtok(copyPerintah, "(), ");
+                        int jumlah=0;
+                        while( tokens != NULL ) {
+                            strcpy(daftarQuery[jumlah], tokens);
+                            printf("%s\n", daftarQuery[jumlah]);
+                            jumlah++;
+                            tokens = strtok(NULL, "(), ");
+                        }
+                        char buatTable[20000];
+                        snprintf(buatTable, sizeof buatTable, "../database/databases/%s/%s", database_used, daftarQuery[2]);
+                        int iterasi = 0;
+                        int iterasiData = 3;
+                        struct table kolom;
+                        while(jumlah > 3){
+                            strcpy(kolom.data[iterasi], daftarQuery[iterasiData]);
+                            printf("%s\n", kolom.data[iterasi]);
+                            strcpy(kolom.type[iterasi], daftarQuery[iterasiData+1]);
+                            iterasiData = iterasiData+2;
+                            jumlah=jumlah-2;
+                            iterasi++;
+                        }
+                        kolom.jumlahkolom = iterasi;
+                        printf("iterasi = %d\n", iterasi);
+                        FILE *fp;
+                        printf("%s\n", buatTable);
+                        fp=fopen(buatTable,"ab");
+                        fwrite(&kolom,sizeof(kolom),1,fp);
+                        fclose(fp);
+```
 ## 8. Drop Database oleh user
+Apabila user memasukkan perintah "DROP" DATABASE [nama_database] maka akan dilakukan pemanggilan perintah snprintf dengan parameter buffer, sizeof buffer, dDatabase:%s", dan copyinput dimana hasil inputan dari User ini berupa [nama_database] akan dilakukan penyimpanan kedalam buffer dengan size sebesar ukuran inputan. Kemudian Inputan ini akan dilakukan pengiriman ke Database dengan melakukan pemanggilan fungsi send dengan parameter clientSocket, buffer, strlen(buffer), 0 yang nantinya fungsi ini akan melakukan pengiriman hasil inputan dari user yang tersimpan di dalam buffer ke server untuk melakukan drop database.
+```c
+else if(strcmp(perintah[0], "DROP")==0){
+			if(strcmp(perintah[1], "DATABASE")==0){
+				snprintf(buffer, sizeof buffer, "dDatabase:%s:%s", perintah[2], argv[2]);
+				send(clientSocket, buffer, strlen(buffer), 0);
+			}else if(strcmp(perintah[1], "TABLE")==0){
+				snprintf(buffer, sizeof buffer, "dTable:%s:%s", perintah[2], argv[2]);
+				send(clientSocket, buffer, strlen(buffer), 0);
+			}else if(strcmp(perintah[1], "COLUMN")==0){
+				// printf("masuk\n");
+				snprintf(buffer, sizeof buffer, "dColumn:%s:%s:%s", perintah[2], perintah[4] ,argv[2]);
+				send(clientSocket, buffer, strlen(buffer), 0);
+			}
+```
+Kemudian, kita melakukan check terlebih dahulu apakah database yang diminta termasuk dalam database yang allowed atau diperbolehkan untuk dihapus. Jika database tidak termasuk dalam database yang allowed maka kembalikan kalimat "Access_database : You're Not Allowed" ke dalam buffer untuk dilakukan pengiriman kembali kepada client.
+```c
+else if(strcmp(perintah[0], "dDatabase")==0){
+					int allowed = cekAllowedDatabase(perintah[2], perintah[1]);
+					if(allowed != 1){
+						char peringatan[] = "Access_database : You're Not Allowed";
+						send(newSocket, peringatan, strlen(peringatan), 0);
+						bzero(buffer, sizeof(buffer));
+						continue;
+```
+Namun, jika database termasuk dalam database yang allowed maka lakukan penghapusan database tersebut dan kembalikan kalimat "Database Has Been Removed" ke dalam buffer untuk dilakukan pengiriman kembali kepada client. Dan dengan demikian fungsi Drop Database sudah berhasil dilakukan.
+```c
+					}else{
+						char hapus[20000];
+						snprintf(hapus, sizeof hapus, "rm -r databases/%s", perintah[1]);
+						system(hapus);
+						char peringatan[] = "Database Has Been Removed";
+						send(newSocket, peringatan, strlen(peringatan), 0);
+						bzero(buffer, sizeof(buffer));
+					}
+```
 ## 9. Drop Table oleh user
+Apabila user memasukkan perintah "DROP" TABLE [nama_tabel] maka akan dilakukan pemanggilan perintah snprintf dengan parameter buffer, sizeof buffer, dTable:%s", dan copyinput dimana hasil inputan dari User ini berupa [nama_table] akan dilakukan penyimpanan kedalam buffer dengan size sebesar ukuran inputan. Kemudian Inputan ini akan dilakukan pengiriman ke Database dengan melakukan pemanggilan fungsi send dengan parameter clientSocket, buffer, strlen(buffer), 0 yang nantinya fungsi ini akan melakukan pengiriman hasil inputan dari user yang tersimpan di dalam buffer ke server untuk melakukan drop table.
+```c
+else if(strcmp(perintah[0], "DROP")==0){
+			if(strcmp(perintah[1], "DATABASE")==0){
+				snprintf(buffer, sizeof buffer, "dDatabase:%s:%s", perintah[2], argv[2]);
+				send(clientSocket, buffer, strlen(buffer), 0);
+			}else if(strcmp(perintah[1], "TABLE")==0){
+				snprintf(buffer, sizeof buffer, "dTable:%s:%s", perintah[2], argv[2]);
+				send(clientSocket, buffer, strlen(buffer), 0);
+			}else if(strcmp(perintah[1], "COLUMN")==0){
+				// printf("masuk\n");
+				snprintf(buffer, sizeof buffer, "dColumn:%s:%s:%s", perintah[2], perintah[4] ,argv[2]);
+				send(clientSocket, buffer, strlen(buffer), 0);
+			}
+```
+Kemudian di bagian server, pertama-tama akan dilakukan pencarian database, jika database belum dilakukan pemilihan, maka kembalikan kalimat "You're not selecting database yet" ke dalam buffer untuk dilakukan pengiriman kembali kepada client.
+```c
+else if(strcmp(perintah[0], "dTable")==0){
+					if(database_used[0] == '\0'){
+						strcpy(database_used, "You're not selecting database yet");
+						send(newSocket, database_used, strlen(database_used), 0);
+						bzero(buffer, sizeof(buffer));
+						continue;
+					}
+```
+Kemudian, jika database sudah dilakukan pemilihan, maka ambil perintah yang tadi dikirimkan dan lakukan penyimpanan kedalam buffer. Lalu lakukan penghapusan table yang diminta dan kembalikan kalimat "Table Has Been Removed" ke dalam buffer untuk dilakukan pengiriman kembali kepada client. Dan dengan demikian fungsi Drop Table sudah berhasil dilakukan.
+```c
+					char hapus[20000];
+					snprintf(hapus, sizeof hapus, "databases/%s/%s", database_used ,perintah[1]);
+					remove(hapus);
+					char peringatan[] = "Table Has Been Removed";
+					send(newSocket, peringatan, strlen(peringatan), 0);
+					bzero(buffer, sizeof(buffer));
+```
 ## 10. Drop column oleh user
+Apabila user memasukkan perintah "DROP" COLUMN [nama_kolom] FROM TABLE [nama_tabel] maka akan dilakukan pemanggilan perintah snprintf dengan parameter buffer, sizeof buffer, dColumn:%s", dan copyinput dimana hasil inputan dari User ini berupa [nama_kolom] dan [nama_table] akan dilakukan penyimpanan kedalam buffer dengan size sebesar ukuran inputan. Kemudian Inputan ini akan dilakukan pengiriman ke Database dengan melakukan pemanggilan fungsi send dengan parameter clientSocket, buffer, strlen(buffer), 0 yang nantinya fungsi ini akan melakukan pengiriman hasil inputan dari user yang tersimpan di dalam buffer ke server untuk melakukan drop column.
+```c
+else if(strcmp(perintah[0], "DROP")==0){
+			if(strcmp(perintah[1], "DATABASE")==0){
+				snprintf(buffer, sizeof buffer, "dDatabase:%s:%s", perintah[2], argv[2]);
+				send(clientSocket, buffer, strlen(buffer), 0);
+			}else if(strcmp(perintah[1], "TABLE")==0){
+				snprintf(buffer, sizeof buffer, "dTable:%s:%s", perintah[2], argv[2]);
+				send(clientSocket, buffer, strlen(buffer), 0);
+			}else if(strcmp(perintah[1], "COLUMN")==0){
+				// printf("masuk\n");
+				snprintf(buffer, sizeof buffer, "dColumn:%s:%s:%s", perintah[2], perintah[4] ,argv[2]);
+				send(clientSocket, buffer, strlen(buffer), 0);
+			}
+```
+Kemudian di bagian server, pertama-tama akan dilakukan pencarian database, jika database belum dilakukan pemilihan, maka kembalikan kalimat "You're not selecting database yet" ke dalam buffer untuk dilakukan pengiriman kembali kepada client.
+```c
+else if(strcmp(perintah[0], "dColumn")==0){
+					if(database_used[0] == '\0'){
+						strcpy(database_used, "You're not selecting database yet");
+						send(newSocket, database_used, strlen(database_used), 0);
+						bzero(buffer, sizeof(buffer));
+						continue;
+					}
+```
+Kemudian, jika database sudah dilakukan pemilihan, maka ambil perintah yang tadi dikirimkan dan lakukan penyimpanan kedalam buffer. Lalu lakukan pencarian column didalam file yang ditunjuk sesuai dengan yang diminta oleh user pada perintah [nama_column]. Jika column tidak dapat ditemukan maka kembalikan kalimat "Column Not Found" ke dalam buffer untuk dilakukan pengiriman kembali kepada client.
+```c
+					char buatTable[20000];
+					snprintf(buatTable, sizeof buatTable, "databases/%s/%s", database_used, perintah[2]);
+					int index = findColumn(buatTable, perintah[1]);
+                    if(index == -1){
+                        char peringatan[] = "Column Not Found";
+                        send(newSocket, peringatan, strlen(peringatan), 0);
+                        bzero(buffer, sizeof(buffer));
+                        continue;
+                    }
+```
+Jika column berhasil ditemukan, lakukan penghapusan column yang diminta dan kembalikan kalimat "column Has Been Removed" ke dalam buffer untuk dilakukan pengiriman kembali kepada client. Dan dengan demikian fungsi Drop column sudah berhasil dilakukan.
+```c
+                    // printf("%d\n", index);
+					deleteColumn(buatTable, index);
+					char peringatan[] = "Column Has Been Removed";
+					send(newSocket, peringatan, strlen(peringatan), 0);
+					bzero(buffer, sizeof(buffer));
+```
 ## 11. Insert oleh user
 Apabila user memasukkan perintah "INSERT" dan juga "INTO" [nama_tabel] ([value], ...);
-maka akan dilakukan pemanggilan perintah snprintf dengan parameter buffer, sizeof buffer, "insert:%s", dan copyinput dimana hasil inputan dari User ini berupa nama_tabel dan value akan dilakukan penyimpanan kedalam buffer dengan size sebesar ukuran inputan. Kemudian Inputan ini akan dilakukan pengiriman ke Database dengan melakukan pemanggilan fungsi send dengan parameter clientSocket, buffer, strlen(buffer), 0 yang nantinya fungsi ini akan melakukan pengiriman hasil inputan dari user yang tersimpan di dalam buffer ke server untuk dimasukkan kedalam Database.
+maka akan dilakukan pemanggilan perintah snprintf dengan parameter buffer, sizeof buffer, "insert:%s", dan copyinput dimana hasil inputan dari User ini berupa [nama_tabel] dan [value] akan dilakukan penyimpanan kedalam buffer dengan size sebesar ukuran inputan. Kemudian Inputan ini akan dilakukan pengiriman ke Database dengan melakukan pemanggilan fungsi send dengan parameter clientSocket, buffer, strlen(buffer), 0 yang nantinya fungsi ini akan melakukan pengiriman hasil inputan dari user yang tersimpan di dalam buffer ke server untuk dimasukkan kedalam Database.
 ```c
 else if(strcmp(perintah[0], "INSERT")==0 && strcmp(perintah[1], "INTO")==0){
             snprintf(buffer, sizeof buffer, "insert:%s", copyinput);
@@ -620,7 +797,7 @@ Kemudian jika data perintah yang dikirimkan ternyata tidak membawa inputan data 
                 }
 ```
 ## 13. Delete dan Delete where oleh user
-Apabila user memasukkan perintah "DELETE" [nama_tabel] maka akan dilakukan pemanggilan perintah snprintf dengan parameter buffer, sizeof buffer, "update:%s", dan copyinput dimana hasil inputan dari User berupa [nama_tabel] akan dilakukan penyimpanan kedalam buffer dengan size sebesar ukuran inputan. Kemudian Inputan ini akan dilakukan pengiriman ke Database dengan melakukan pemanggilan fungsi send dengan parameter clientSocket, buffer, strlen(buffer), 0 yang nantinya fungsi ini akan melakukan pengiriman hasil inputan dari user yang tersimpan di dalam buffer ke server untuk melakukan delete data didalam Database.
+Apabila user memasukkan perintah "DELETE" [nama_tabel] maka akan dilakukan pemanggilan perintah snprintf dengan parameter buffer, sizeof buffer, "delete:%s", dan copyinput dimana hasil inputan dari User berupa [nama_tabel] akan dilakukan penyimpanan kedalam buffer dengan size sebesar ukuran inputan. Kemudian Inputan ini akan dilakukan pengiriman ke Database dengan melakukan pemanggilan fungsi send dengan parameter clientSocket, buffer, strlen(buffer), 0 yang nantinya fungsi ini akan melakukan pengiriman hasil inputan dari user yang tersimpan di dalam buffer ke server untuk melakukan delete data didalam Database.
 ```c
 else if(strcmp(perintah[0], "DELETE")==0){
             snprintf(buffer, sizeof buffer, "delete:%s", copyinput);
@@ -681,7 +858,7 @@ Lalu jika kolom berhasil ditemukan maka, lakukan penghapusan semua data yang ada
                 }
 ```
 ## 14. Select dan Select where oleh user
-Apabila user memasukkan perintah "SELECT" [nama_kolom, … | *] FROM [nama_tabel]; maka akan dilakukan pemanggilan perintah snprintf dengan parameter buffer, sizeof buffer, "update:%s", dan copyinput dimana hasil inputan dari User berupa [nama_kolom, … | *] dan [nama_tabel] akan dilakukan penyimpanan kedalam buffer dengan size sebesar ukuran inputan. Kemudian Inputan ini akan dilakukan pengiriman ke Database dengan melakukan pemanggilan fungsi send dengan parameter clientSocket, buffer, strlen(buffer), 0 yang nantinya fungsi ini akan melakukan pengiriman hasil inputan dari user yang tersimpan di dalam buffer ke server untuk melakukan select data didalam Database.
+Apabila user memasukkan perintah "SELECT" [nama_kolom, … | *] FROM [nama_tabel]; maka akan dilakukan pemanggilan perintah snprintf dengan parameter buffer, sizeof buffer, "select:%s", dan copyinput dimana hasil inputan dari User berupa [nama_kolom, … | *] dan [nama_tabel] akan dilakukan penyimpanan kedalam buffer dengan size sebesar ukuran inputan. Kemudian Inputan ini akan dilakukan pengiriman ke Database dengan melakukan pemanggilan fungsi send dengan parameter clientSocket, buffer, strlen(buffer), 0 yang nantinya fungsi ini akan melakukan pengiriman hasil inputan dari user yang tersimpan di dalam buffer ke server untuk melakukan select data didalam Database.
 ```c
 else if(strcmp(perintah[0], "SELECT")==0){
             snprintf(buffer, sizeof buffer, "select:%s", copyinput);
