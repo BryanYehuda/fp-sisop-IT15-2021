@@ -380,6 +380,58 @@ kami juga menyimpan daftar izin setiap user menggunakan struct pada file yang be
 ## 5. Handle perintah USE oleh user
 Berikut adalah kode yang kami gunakan pada sisi client untuk melakukan handle USE
 ```c
+else if(strcmp(perintah[0], "USE")==0){
+    snprintf(buffer, sizeof buffer, "uDatabase:%s:%s:%d", perintah[1], argv[2], id_user);
+    send(clientSocket, buffer, strlen(buffer), 0);
+}
+```
+Hal yang penting dari ini adalah kami mengirimkan flag uDatabase sebagai tanda user menggunakan perintah use database. pada server kami menggunakan perintah dibawah ini untuk menghandle perintah tersebut
+```c
+else if(strcmp(perintah[0], "uDatabase") == 0){
+    if(strcmp(perintah[3], "0") != 0){
+        int allowed = cekAllowedDatabase(perintah[2], perintah[1]);
+        if(allowed != 1){
+            char peringatan[] = "Access_database : You're Not Allowed";
+            send(newSocket, peringatan, strlen(peringatan), 0);
+            bzero(buffer, sizeof(buffer));
+        }else{
+            strncpy(database_used, perintah[1], sizeof(perintah[1]));
+            char peringatan[] = "Access_database : Allowed";
+            printf("database_used = %s\n", database_used);
+            send(newSocket, peringatan, strlen(peringatan), 0);
+            bzero(buffer, sizeof(buffer));
+        }
+    }
+}
+```
+Setelah memastikan flag yang dikirim user, kami memanggil fungsi cekAllowedDatabase untuk mengecek apakah user boleh menggunakan database tersbut. Jika boleh maka kami memasukkan database yang digunakan ke dalam variabel database_used. Jika tidak boleh, maka akan membalas ke user acces database not allowed. Berikut adalah fungsi dari cekAllowedDatabase.
+```c
+int cekAllowedDatabase(char *nama, char *database){
+	FILE *fp;
+	struct allowed_database user;
+	int id,found=0;
+	printf("nama = %s  database = %s", nama, database);
+	fp=fopen("../database/databases/permission.dat","rb");
+	while(1){	
+		fread(&user,sizeof(user),1,fp);
+		if(strcmp(user.name, nama)==0){
+			// printf("MASUK!");
+			if(strcmp(user.database, database)==0){
+				return 1;
+			}
+		}
+		if(feof(fp)){
+			break;
+		}
+	}
+	fclose(fp);
+	return 0;
+}
+```
+karna pada insert permission kami menggnuakan struct dalam menyimpan permission, maka untuk membaca nya kami juga menggunakan struct. Untuk setiap data yang dibaca dari file, maka kami bandingkan dengan inputan dari user untuk di cek apakah sama atau tidak. Jika tidak sama return 0 atau jika sama return 1.
+## 6. Create Database oleh user
+Berikut adalah kode yang kami gunakan pada sisi client untuk melakukan handle database
+```c
 if(strcmp(perintah[0], "CREATE")==0){
     if(strcmp(perintah[1], "USER")==0 && strcmp(perintah[3], "IDENTIFIED")==0 && strcmp(perintah[4], "BY")==0){
         // kodelain
@@ -402,7 +454,178 @@ else if(strcmp(perintah[0], "cDatabase")==0){
 }
 ```
 nah karena membuat database, bearti membuat sebuah folder, maka kami menggunakan mkdir. dan karna yang membuat database, langsung mempunyai akses maka kami memanggil fungsi insertPermission(sudah dijelaskan diatas) untuk memasukkan permission user tersebut.
-## 6. Create Database oleh user
-
 ## 7. Create Table oleh user
-## 8. Create Column oleh user
+## 8. Drop Database oleh user
+## 9. Drop Table oleh user
+## 10. Drop column oleh user
+## 11. Insert oleh user
+## 12. Update dan Update Where oleh user
+## 13. Delete dan Delete where oleh user
+## 14. Select dan Select where oleh user
+## 15. Logging untuk setiap perintah user
+Setiap perintah yang dimasukkan user akan dicek apakah valid atau tidak. Hal tersebut kami lakukan dengan memanggil fungsi dibawah ini
+```c
+if(wrongCommand != 1){
+    char namaSender[10000];
+    if(id_user == 0){
+        strcpy(namaSender, "root");
+    }else{
+        strcpy(namaSender, argv[2]);
+    }
+    writelog(copyinput, namaSender);
+}
+```
+jika perintah yang dimasukkan user valid dan bukan perintah yang salah, maka kita cek siapa yang menjalankan perintah dengan menggunakan UID. jika 0 maka root, selain itu ambil nama user dari argv[2]. setelah itu panggil fungsi writelog. fungsi writelog adalah sebagai berikut
+```c
+void writelog(char *perintah, char *nama){
+	time_t rawtime;
+	struct tm *timeinfo;
+	time(&rawtime);
+	timeinfo = localtime(&rawtime);
+ 
+	char infoWriteLog[1000];
+
+	FILE *file;
+	char lokasi[10000];
+	snprintf(lokasi, sizeof lokasi, "../database/log/log%s.log", nama);
+	file = fopen(lokasi, "ab");
+
+	sprintf(infoWriteLog, "%d-%.2d-%.2d %.2d:%.2d:%.2d:%s:%s;\n",timeinfo->tm_year + 1900, timeinfo->tm_mon + 1, timeinfo->tm_mday, timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec, nama, perintah);
+	// sprintf(infoWriteLog, "%.2d%.2d%d-%.2d:%.2d:%.2d::%s::%s\n", timeinfo->tm_mday, timeinfo->tm_mon + 1, timeinfo->tm_year + 1900, timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec, nama, filepath);
+
+	fputs(infoWriteLog, file);
+	fclose(file);
+	return;
+}
+```
+dari kode diatas dapat dilihat bahwa kami menyimpan log nya itu untuk setiap user yang menjalankannya. hal yang kami write ke dalam file itu sesuai dengan format yang sudah diatur atau di tentukan pada ketentuan FP.
+## 16. Reliability
+Ketika user menjalankan perintah tersebut maka kami akan memasukkan log yang dipunyai oleh user, kedalam file yang telah ditentukan oleh user, berikut adalah kode yang kami gunakan.
+```c
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <sys/socket.h>
+#include <sys/types.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <sys/stat.h>
+#include <dirent.h>
+#include <ctype.h>
+#include <time.h>
+
+#define PORT 4443
+
+struct allowed{
+	char name[10000];
+	char password[10000];
+};
+
+int cekAllowed(char *username, char *password){
+	FILE *fp;
+	struct allowed user;
+	int id,found=0;
+	fp=fopen("../database/databases/user.dat","rb");
+	while(1){	
+		fread(&user,sizeof(user),1,fp);
+		// printf("%s %s\n", user.name, username);
+		// printf("%s %s\n", user.password, password);
+		// printf("masuk");
+		if(strcmp(user.name, username)==0){
+			// printf("MASUK!");
+			if(strcmp(user.password, password)==0){
+				found=1;
+			}
+		}
+		if(feof(fp)){
+			break;
+		}
+	}
+	fclose(fp);
+	// printf("found %d: \n",found);
+	if(found==0){
+		printf("You're Not Allowed\n");
+		return 0;
+	}else{
+		return 1;
+	}
+	
+}
+
+int main(int argc, char *argv[]){
+	// printf("%s\n", argv[0]);
+	int allowed=0;
+	int id_user = geteuid();
+	char database_used[1000];
+	if(geteuid() == 0){
+		// printf("I AM ROOT");
+		allowed=1;
+	}else{
+		int id = geteuid();
+		// printf("ID kamu : %d", id);
+		allowed = cekAllowed(argv[2],argv[4]);
+	}
+	if(allowed==0){
+		return 0;
+	}
+    FILE *fp;
+    char lokasi[10000];
+	snprintf(lokasi, sizeof lokasi, "../database/log/log%s.log", argv[2]);
+    fp = fopen(lokasi, "rb");
+    char buffer[20000];
+    char perintah[100][10000];
+    int found=0;
+    while (fgets(buffer, 20000 , fp)){
+        char *token;
+        char buffercopy[20000];
+        snprintf(buffercopy, sizeof buffercopy, "%s", buffer);
+        token = strtok(buffercopy, ":");
+        int i=0;
+        while ( token != NULL){
+            strcpy(perintah[i], token);
+			// printf("%s\n", perintah[i]);
+			i++;
+			token = strtok(NULL, ":");
+        }
+        // printf("%s\n", perintah[4]);
+        char *b = strstr(perintah[4], "USE");
+        if(b != NULL){
+            char *tokens;
+            char perintahCopy[20000];
+            strcpy(perintahCopy, perintah[4]);
+            tokens = strtok(perintahCopy, "; ");
+            int j=0;
+            char perintahUse[100][10000];
+            while ( tokens != NULL){
+                strcpy(perintahUse[j], tokens);
+                // printf("%s\n", perintahUse[j]);
+                j++;
+                tokens = strtok(NULL, "; ");
+            }
+            char databaseTarget[20000];
+            // sprintf(databaseTarget, "%s;", argv[5]);
+            // printf("%s\n", perintahUse[1]);
+            // printf("%s\n", databaseTarget);
+            if(strcmp(perintahUse[1], argv[5])==0){
+                found = 1;
+            }else{
+                found = 0;
+            }
+        }
+        // printf("%d\n", found);
+        if(found == 1){
+            printf("%s", buffer);
+        }
+        // printf("%s", buffer);
+    }
+    fclose(fp);
+}
+```
+Hal yang kami lakukan adalah mengecek apakah user boleh menggunakan program ini atau tidak. Menggunakan cara yang sama dengan program yang sebelumnya dimana untuk setiap user akan dicek apakah allowed atau tidak(sama dengan yang sudah dijelaskan sebelumnya). Setelah itu kita buka file log yang dipunyai user. Lalu baca log tersebut, ketika user menggunakan database yang sama dengan yang diinputkan user, maka salin semua perintah yang dijalankan user sampai mengganti current directory kedalam file yang telah dibuat atau ditentukan oleh user.
+
+## 17. Error Handling
+Untuk error handling sudah dijelaskan bersaman dengan dijalankannya perintah lain
+
+## Kendala Pengerjaan 
+1. Waktu yang sedikit dan banyak nya tugas membuat tidak bisa maksimal dalam mengerjakannya.
