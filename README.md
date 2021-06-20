@@ -167,7 +167,7 @@ int main(){
 ```
 Setelah kami membuat kode template untuk komunikasi client-server dengan menggunakan socket. setelah itu kami akan memproses bagaimana cara client dan server berkomunikasi. 
 
-2. Kami membuat proses bagaimana cara root menggunakan kode server
+## 1. Kami membuat proses bagaimana cara root menggunakan kode server
 ```c
 //Library lain
 
@@ -198,7 +198,7 @@ int main(int argc, char *argv[]){
 ```
 cara yang kami lakukan adalah dengan mengambil uid dari user yang memanggil program ini. Jika UID nya adalah 0, maka dia adalah user root.
 
-2. Setelah membuat bagaimana cara root mengakses program, sekarang kami membuat proses bagaimana cara root untuk membuat CREATE USER
+## 2. Setelah membuat bagaimana cara root mengakses program, sekarang kami membuat proses bagaimana cara root untuk membuat CREATE USER
 ```c
     //kode lain
     scanf(" %[^\n]s", input);
@@ -272,7 +272,7 @@ void createUser(char *nama, char *password){
 ```
 Pertama kami menyimpan data yang diparsingkan ke fungsi createUser kedalam struct user. setelah kami menyimpan dalam struct, variabel tersebut kami write ke file yang bernama user.dat
 
-3. Membuat proses login user menggunakan program
+## 3. Membuat proses login user menggunakan program
 ```c
 int main(int argc, char *argv[]){
 	// printf("%s\n", argv[0]);
