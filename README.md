@@ -329,3 +329,80 @@ int cekAllowed(char *username, char *password){
 }
 ```
 Untuk mengecek apakah user bisa mengakses program, hal pertama yang kami lakukan adalah membaca file user.dat dan karena data yang ada disimpan dalam bentuk struct maka kita juga harus membaca dalam bentuk struct. Setelah itu kami baca perline setiap filenya lalu kami bandingkan apakah usernama dan password nya sama. setelah sama, maka dia akan return 1 yang mengartikan dia berhak menggunakan program.
+
+## 4. Membuat proses bagaimana cara root menggunakan perintah grant permission
+```c
+else if(strcmp(perintah[0], "GRANT")==0 && strcmp(perintah[1], "PERMISSION")==0 && strcmp(perintah[3], "INTO")==0){
+    snprintf(buffer, sizeof buffer, "gPermission:%s:%s:%d", perintah[2],perintah[4], id_user);
+    send(clientSocket, buffer, strlen(buffer), 0);
+}
+```
+Hal yang kami lihat apakah user menggunakan perintah GRANT PERMISSION namaDB INTO user. setelah itu kami kirimkan flag gPermission serta beberapa variable lain kerserver. untuk handler di server, kami memisahkan menggunakan strtok seperti yang sudah kami jelaskan sebelumnya diatas. Lalu diproses menggunakan kode dibawah ini.
+```c
+else if(strcmp(perintah[0], "gPermission")==0){
+    if(strcmp(perintah[3], "0")==0){
+        int exist = cekUserExist(perintah[2]);
+        if(exist == 1){
+            insertPermission(perintah[2], perintah[1]);
+        }else{
+            char peringatan[] = "User Not Found";
+            send(newSocket, peringatan, strlen(peringatan), 0);
+            bzero(buffer, sizeof(buffer));
+        }
+    }else{
+        char peringatan[] = "You're Not Allowed";
+        send(newSocket, peringatan, strlen(peringatan), 0);
+        bzero(buffer, sizeof(buffer));
+    }
+}
+```
+jika flag yang dikirimkan oleh user adalah "gPermission" lalu kami cek dahulu apa user yang ingin diberikan permission ada atau tidak. jika ada panggil fungsi insertPermission. JIka tidak ditemukan, balas ke client bahwa user not found. Ttetapi jika yang mengirimkan perintah bukan root, maka balas you're not allowed. Untuk fungsi inserPermission berikut adalah kode yang kami gunakan
+```c
+struct allowed_database{
+	char database[10000];
+	char name[10000];
+};
+
+void insertPermission(char *nama, char *database){
+	struct allowed_database user;
+	strcpy(user.name, nama);
+	strcpy(user.database, database);
+	printf("%s %s\n", user.name, user.database);
+	char fname[]={"databases/permission.dat"};
+	FILE *fp;
+	fp=fopen(fname,"ab");
+	fwrite(&user,sizeof(user),1,fp);
+	fclose(fp);
+}
+```
+kami juga menyimpan daftar izin setiap user menggunakan struct pada file yang bernama permission.dat.
+
+## 5. Handle perintah USE oleh user
+Berikut adalah kode yang kami gunakan pada sisi client untuk melakukan handle USE
+```c
+if(strcmp(perintah[0], "CREATE")==0){
+    if(strcmp(perintah[1], "USER")==0 && strcmp(perintah[3], "IDENTIFIED")==0 && strcmp(perintah[4], "BY")==0){
+        // kodelain
+    }else if(strcmp(perintah[1], "DATABASE")==0){
+        snprintf(buffer, sizeof buffer, "cDatabase:%s:%s:%d", perintah[2], argv[2], id_user);
+        send(clientSocket, buffer, strlen(buffer), 0);
+    }else if(strcmp(perintah[1], "TABLE")==0){
+        // Kode lain
+    }
+}
+```
+flag yang dikirimkan oleh user ketika menjalankan perintah ini ke server adalah cDatabase dan juga beberapa informasi lainnya. Untuk pada server kami menghandle dengan cara berikut
+```c
+else if(strcmp(perintah[0], "cDatabase")==0){
+    char lokasi[20000];
+    snprintf(lokasi, sizeof lokasi, "databases/%s", perintah[1]);
+    printf("lokasi = %s, nama = %s , database = %s\n", lokasi, perintah[2], perintah[1]);
+    mkdir(lokasi,0777);
+    insertPermission(perintah[2], perintah[1]);
+}
+```
+nah karena membuat database, bearti membuat sebuah folder, maka kami menggunakan mkdir. dan karna yang membuat database, langsung mempunyai akses maka kami memanggil fungsi insertPermission(sudah dijelaskan diatas) untuk memasukkan permission user tersebut.
+## 6. Create Database oleh user
+
+## 7. Create Table oleh user
+## 8. Create Column oleh user
