@@ -271,3 +271,61 @@ void createUser(char *nama, char *password){
 }
 ```
 Pertama kami menyimpan data yang diparsingkan ke fungsi createUser kedalam struct user. setelah kami menyimpan dalam struct, variabel tersebut kami write ke file yang bernama user.dat
+
+3. Membuat proses login user menggunakan program
+```c
+int main(int argc, char *argv[]){
+	// printf("%s\n", argv[0]);
+	int allowed=0;
+	int id_user = geteuid();
+	char database_used[1000];
+	if(geteuid() == 0){
+		// printf("I AM ROOT");
+		allowed=1;
+	}else{
+		int id = geteuid();
+		// printf("ID kamu : %d", id);
+		allowed = cekAllowed(argv[2],argv[4]);
+	}
+	if(allowed==0){
+		return 0;
+	}
+
+    //Kode lain
+	
+    return 0;
+}
+```
+Pada kode tersebut kami melihat apakah user merupakan root atau tidak. Jika tidak root, maka kami akan cek apakah user tersebut berhak mengakses program yang dipanggil melalui fungsi cekAllowed. Fungsi cekAllowed adalah sebagai berikut :
+```c
+struct allowed{
+	char name[10000];
+	char password[10000];
+};
+
+int cekAllowed(char *username, char *password){
+	FILE *fp;
+	struct allowed user;
+	int id,found=0;
+	fp=fopen("../database/databases/user.dat","rb");
+	while(1){	
+		fread(&user,sizeof(user),1,fp);
+		if(strcmp(user.name, username)==0){
+			if(strcmp(user.password, password)==0){
+				found=1;
+			}
+		}
+		if(feof(fp)){
+			break;
+		}
+	}
+	fclose(fp);
+	if(found==0){
+		printf("You're Not Allowed\n");
+		return 0;
+	}else{
+		return 1;
+	}
+}
+```
+Untuk mengecek apakah user bisa mengakses program, hal pertama yang kami lakukan adalah membaca file user.dat dan karena data yang ada disimpan dalam bentuk struct maka kita juga harus membaca dalam bentuk struct. Setelah itu kami baca perline setiap filenya lalu kami bandingkan apakah usernama dan password nya sama. setelah sama, maka dia akan return 1 yang mengartikan dia berhak menggunakan program.
