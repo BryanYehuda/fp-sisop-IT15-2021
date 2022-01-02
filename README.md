@@ -1,5 +1,13 @@
 # fp-sisop-IT15-2021
+## Laporan Pengerjaan Modul Final Project Praktikum Sistem Operasi    
 
+### Nama Anggota Kelompok:  
+1. Bryan Yehuda Mannuel
+2. Calvin Mannuel Simatupang
+3. Ian Felix Jonathan Simanjuntak
+4. Muhammad Nur Fauzan
+
+## Penjelasan Code
 Kami membuat temple kode untuk client server nya. Berikut adalah template yang kami gunakan dalam membuat socket.  
 kode template untuk client.  
 `*ini client*`
@@ -1238,5 +1246,5 @@ Hal yang kami lakukan adalah mengecek apakah user boleh menggunakan program ini 
 ## 17. Error Handling
 Untuk error handling sudah dijelaskan bersaman dengan dijalankannya perintah lain
 
-## Kendala Pengerjaan 
+## Kendala yang Dialami 
 1. Waktu yang sedikit dan banyak nya tugas membuat tidak bisa maksimal dalam mengerjakannya.
